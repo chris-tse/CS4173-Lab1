@@ -1,5 +1,6 @@
 # CS 4173 Lab 1
-Christopher Tse
+Christopher Tse  
+112971666
 
 ## Task 1: Frequency Analysis Against Monoalphabetic Substitution Cipher
 
@@ -8,7 +9,8 @@ Christopher Tse
 In order to find the encryption key and plaintext, we can make use of some properties of substitution ciphers which make it weak to attacks. The most helpful one would be frequency analysis. Initially, we can attempt a simple substitution of the alphabet after a single letter frequency analysis according to the relative frequencies:
 
 ```bash
-$ tr 'nyvxuqmhtipaczlbgredfskjow' 'etaoinsrhdlucmfywgpbvkxqjz' < ciphertext.txt > plain.txt
+$ tr 'nyvxuqmhtipaczlbgredfskjow' 'etaoinsrhdlucmfywgpbvkxqjz' \
+    < ciphertext.txt > plain.txt
 ```
 
 ### Bigram Frequency Analysis
@@ -22,13 +24,61 @@ $ tr 'ytnhmu' 'THERIN' < ciphertext.txt  > plain.txt
 ### Incremental Substitution
 Now we can make use of the word list provided to make incremental additions to the substitution key. Using the `worddiff.py` script, we can search for any words in the text that now only have `n` number of unsubstituted letters to compare with the word list:
 
+```py
+# worddiff.py
+
+#! /usr/local/bin/python3
+
+import sys
+
+def n_lower_chars(string):
+    return sum(1 for char in string if char.islower())
+
+diff = int(sys.argv[1])
+text = sys.stdin.read().split()
+
+for word in text:
+    num_lower_case = n_lower_chars(word)
+    if num_lower_case <= diff and num_lower_case > 0:
+        print(word, end=', ')
+```
+
+
 ```bash
 ./worddiff.py 1 < plain.txt
 
 TzRN, xN, RIrHT, THIq, TRIe, v, vT, ITq, HIq, vT, ENp, v, v, lHETHER, ...
 ```
 
-Using the `compareword.py` script, we can choose a word from the result of the `worddiff.py` script and convert it to a regex pattern to find any words in the word list that may match. For example:
+Using the `compareword.py` script, we can choose a word from the result of the `worddiff.py` script and convert it to a regex pattern to find any words in the word list that may match. 
+
+```py
+# compareword.py
+
+#! /usr/local/bin/python3
+
+import sys
+import re
+
+wordlist = list(map(str.lower, sys.stdin.read().split()))
+target = sys.argv[1]
+
+def replace_with_dot(c):
+    if c.islower():
+        return '.'
+    else:
+        return c
+
+pattern = ''.join(list(map(replace_with_dot, target)))
+
+for word in wordlist:
+    m = re.match(pattern, word, re.IGNORECASE)
+    if m != None:
+        print(m.group(0))
+```
+
+
+For example:
 
 ```bash
 $ ./compareword.py lHETHER < words.txt
@@ -113,3 +163,56 @@ There is also a provided `plain2.txt` which has a slight change in the plaintext
 
 ## Task 3: Encryption Mode – ECB vs. CBC
 
+Let us examine the difference between ECB and CBC encryption modes. First, we will create a script to patch the header of the encrypted `bmp` file in `patchimg.sh`.
+
+```bash
+# patchimg.sh
+
+#! /bin/bash
+head -c 54 $1 > header
+tail -c +55 $2 > body
+cat header body > new.bmp
+```
+
+Next, let us generate the outputs from each encryption mode:
+
+```
+$ openssl enc -aes-256-ecb -e \
+    -in pic_original.bmp -out enc.bmp \
+    -K 00112233445566778889aabbccddeeff \
+    -iv 0102030405060708
+$ ./patchimg.sh pic_original.bmp enc.bmp
+$ mv new.bmp ecbenc.bmp
+
+$ openssl enc -aes-256-cbc -e \
+    -in pic_original.bmp -out enc.bmp \
+    -K 00112233445566778889aabbccddeeff \
+    -iv 0102030405060708
+$ ./patchimg.sh pic_original.bmp enc.bmp
+$ mv new.bmp cbcenc.bmp
+```
+Encryption with ECB
+![Original with ECB](task3/ecbenc.bmp)
+
+Encryption with CBC
+![Original with CBC](task3/cbcenc.bmp)
+
+Examining both outputs, we can clearly see that while the CBC mode output does not provide any useful information, the ECB mode still shows quite clearly what the original image used to be. This can be attributed to the parallel operations of the ECB mode, where each block undergoes the same encryption, meaning that overall, every block of the image was shifted in the same manner. 
+<div class="pagebreak"></div>
+
+Repeating the experiment with another image:
+<div class="pagebreak">
+<img src="task3/ray.bmp">
+</div>
+
+We get the following outputs:
+
+Encryption with ECB
+<div class="pagebreak">
+<img src="task3/ecbray.bmp">
+</div>
+
+Encryption with CBC
+![Original with ECB](task3/cbcray.bmp)
+
+While the output of the CBC mode is more or less the same, the ECB results are drastically different. We can still make out some parts of the sky where it is a large area of the same color along with a small section of the letter 'l' where it was solid red, the rest is indistinguishable. This is likely due to the fact that this image has lots of change in color, and so even with ECB, the blocks were very different except where there were large areas of the same color. 
